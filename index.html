@@ -1262,6 +1262,14 @@ body[data-view="ticket"] #panelWallet{ display:none; }
           <span>当前余额</span>
           <div class="money-wrap"><span class="cur" data-cur>¥</span><b id="wBalanceView" style="padding-left:26px;text-align:right;display:block">0</b></div>
         </div>
+        <div class="money-row">
+          <span>累计充值</span>
+          <div class="money-wrap"><span class="cur" data-cur>¥</span><b id="wTotalRechargeView" style="padding-left:26px;text-align:right;display:block">0</b></div>
+        </div>
+        <div class="money-row">
+          <span>累计消费</span>
+          <div class="money-wrap"><span class="cur" data-cur>¥</span><b id="wTotalConsumeView" style="padding-left:26px;text-align:right;display:block">0</b></div>
+        </div>
         <div id="cardMgr" hidden>
           <div class="money-row">
             <span>永久折扣<small class="hint">收款百分比，100＝原价</small></span>
@@ -1275,6 +1283,20 @@ body[data-view="ticket"] #panelWallet{ display:none; }
             <div class="money-wrap">
               <input id="editBalanceAmt" class="control" inputmode="decimal" autocomplete="off" placeholder="输入新余额">
               <button class="btn btn-ghost" id="editBalanceBtn" type="button">改余额</button>
+            </div>
+          </div>
+          <div class="money-row">
+            <span>调整累计<small class="hint">累计充值总额</small></span>
+            <div class="money-wrap">
+              <input id="editTotalRechargeAmt" class="control" inputmode="decimal" autocomplete="off" placeholder="输入新累计">
+              <button class="btn btn-ghost" id="editTotalRechargeBtn" type="button">改累计</button>
+            </div>
+          </div>
+          <div class="money-row">
+            <span>调整累消<small class="hint">累计消费总额</small></span>
+            <div class="money-wrap">
+              <input id="editTotalConsumeAmt" class="control" inputmode="decimal" autocomplete="off" placeholder="输入新累消">
+              <button class="btn btn-ghost" id="editTotalConsumeBtn" type="button">改累消</button>
             </div>
           </div>
           <div class="w-acts">
@@ -2372,8 +2394,9 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
   }
 
   /* ---------- 金额 ---------- */
+  function lineSub(it) { return round2(num(it.amt) * num(it.qty)); }
   function autoTotal() {
-    return state.items.reduce(function (s, it) { return s + num(it.amt); }, 0);
+    return state.items.reduce(function (s, it) { return s + lineSub(it); }, 0);
   }
   function effTotal() {
     return state.total.trim() === '' ? autoTotal() : num(state.total);
@@ -2561,7 +2584,7 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
             '<div class="tk-sub">' + ROLE_LABEL(it.role) + ' · ' + esc(it.name || '—') + '</div>' +
             (it.note && it.note.trim() ? '<div class="tk-note">留言 · ' + esc(it.note.trim()) + '</div>' : '') +
           '</div>' +
-          '<div class="tk-amt"><b>' + money(num(it.amt), false) + '</b>' +
+          '<div class="tk-amt"><b>' + money(lineSub(it), false) + '</b>' +
             '<small>' + esc(it.qty || '0') + ' 件</small>' +
           '</div>' +
         '</div>';
@@ -2852,6 +2875,20 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     for (var i = 0; i < state.cards.length; i++) if (state.cards[i].id === state.activeCardId) return state.cards[i];
     return null;
   }
+  function totalRechargeOf(c) {
+    if (!c) return 0;
+    if (typeof c.totalRecharge === 'number' && isFinite(c.totalRecharge)) return round2(c.totalRecharge);
+    var s = 0;
+    (c.recharges || []).forEach(function (r) { if (r.note !== '手动改余额') s += num(r.amt); });
+    return round2(s);
+  }
+  function totalConsumeOf(c) {
+    if (!c) return 0;
+    if (typeof c.totalConsume === 'number' && isFinite(c.totalConsume)) return round2(c.totalConsume);
+    var s = 0;
+    (c.consumptions || []).forEach(function (r) { s += num(r.amt); });
+    return round2(s);
+  }
   function parsePct(v) { var r = parseFloat(v); if (!isFinite(r) || r <= 0) return 100; if (r <= 1) r = r * 100; return Math.min(100, Math.max(1, Math.round(r))); }
   function syncDiscountFromCard(card) { var d = (card && card.discount != null) ? String(card.discount) : '100'; state.discount = d; var el = $('#discount'); if (el) el.value = d; }
   function trimLedger() {
@@ -2882,9 +2919,15 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     var view = $('#wBalanceView');
     if (view) view.textContent = card ? money(card.balance) : '散单 · 不记余额';
     var balInput = $('#balance'); if (balInput) balInput.value = card ? fmt(card.balance) : '0';
+    var trView = $('#wTotalRechargeView');
+    if (trView) trView.textContent = card ? money(totalRechargeOf(card)) : '—';
+    var tcView = $('#wTotalConsumeView');
+    if (tcView) tcView.textContent = card ? money(totalConsumeOf(card)) : '—';
     var mgr = $('#cardMgr'); if (mgr) mgr.hidden = !card;
     var discEl = $('#cardDiscount'); if (discEl) discEl.value = card ? (card.discount || '100') : '100';
     var editAmt = $('#editBalanceAmt'); if (editAmt) editAmt.value = '';
+    var trAmt = $('#editTotalRechargeAmt'); if (trAmt) trAmt.value = '';
+    var tcAmt = $('#editTotalConsumeAmt'); if (tcAmt) tcAmt.value = '';
     if (card) syncDiscountFromCard(card);
     var cashMode = !card;
     var rechargeBtn = $('#rechargeBtn'), amt = $('#rechargeAmt');
@@ -2915,6 +2958,7 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     var amt = num($('#rechargeAmt').value);
     if (!(amt > 0)) { toast('请输入有效充值金额'); return; }
     card.balance = round2(card.balance + amt);
+    card.totalRecharge = round2(totalRechargeOf(card) + amt);
     card.recharges.push({ t: new Date().toISOString(), amt: round2(amt), after: round2(card.balance), note: '' });
     trimLedger();
     $('#rechargeAmt').value = '';
@@ -2924,7 +2968,7 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
   function newCard() {
     var name = ($('#newCardName').value || '').trim();
     if (!name) { toast('请输入储蓄卡名称'); return; }
-    var card = { id: newCardId(), name: name, balance: 0, discount: '100', recharges: [], consumptions: [] };
+    var card = { id: newCardId(), name: name, balance: 0, totalRecharge: 0, totalConsume: 0, discount: '100', recharges: [], consumptions: [] };
     state.cards.push(card); state.activeCardId = card.id;
     state.name = name; $('#name').value = name; syncDiscountFromCard(card); renderSlip();
     $('#newCardName').value = '';
@@ -2952,6 +2996,30 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
       toast('余额已改为 ' + money(nv));
     }, '调整余额');
   }
+  function editTotalRecharge() {
+    var card = activeCard(); if (!card) { toast('散单不记账，请先选择储蓄卡'); return; }
+    var nv = num($('#editTotalRechargeAmt').value);
+    if (!isFinite(nv) || nv < 0) { toast('请输入有效累计金额'); return; }
+    nv = round2(nv);
+    askConfirm('将「' + card.name + '」累计充值改为 ' + money(nv) + '？', function () {
+      card.totalRecharge = nv;
+      $('#editTotalRechargeAmt').value = '';
+      renderWallet(); save();
+      toast('累计充值已改为 ' + money(nv));
+    }, '调整累计');
+  }
+  function editTotalConsume() {
+    var card = activeCard(); if (!card) { toast('散单不记账，请先选择储蓄卡'); return; }
+    var nv = num($('#editTotalConsumeAmt').value);
+    if (!isFinite(nv) || nv < 0) { toast('请输入有效累消金额'); return; }
+    nv = round2(nv);
+    askConfirm('将「' + card.name + '」累计消费改为 ' + money(nv) + '？', function () {
+      card.totalConsume = nv;
+      $('#editTotalConsumeAmt').value = '';
+      renderWallet(); save();
+      toast('累计消费已改为 ' + money(nv));
+    }, '调整累消');
+  }
   function deleteCard() {
     var card = activeCard(); if (!card) { toast('散单不可删除'); return; }
     askConfirm('删除卡「' + card.name + '」及其全部流水？此操作不可恢复。', function () {
@@ -2963,27 +3031,44 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     }, '删除卡片');
   }
   function chargeOnTicket() {
-    var amt = effPaid();
-    if (!(amt > 0)) return;
-    var desc = state.items.map(function (it) { return it.name || it.type || ''; }).filter(Boolean).join('、');
-    if (desc.length > 30) desc = desc.slice(0, 30) + '…';
     var who = (state.name || '').trim();
     var card = activeCard();
+    var rechargeRows = state.items.filter(function (it) { return it.role === 'recharge'; });
+    var chargeRows = state.items.filter(function (it) { return it.role !== 'recharge'; });
+    var rechargeSum = round2(rechargeRows.reduce(function (s, it) { return s + lineSub(it); }, 0));
+    var chargeRaw = round2(chargeRows.reduce(function (s, it) { return s + lineSub(it); }, 0));
+    if (rechargeSum > 0 && !card) { toast('充值请先选择储蓄卡'); return; }
+    var chargeAmt;
+    if (chargeRows.length === 0) chargeAmt = 0;
+    else if (rechargeRows.length === 0) chargeAmt = effPaid();
+    else chargeAmt = round2(chargeRaw * discountRate());
+    if (!(chargeAmt > 0) && !(rechargeSum > 0)) return;
+    var desc = state.items.map(function (it) { return it.name || it.type || ''; }).filter(Boolean).join('、');
+    if (desc.length > 30) desc = desc.slice(0, 30) + '…';
     var list = card ? card.consumptions : state.cashConsumptions;
     var last = list[list.length - 1];
     var doCharge = function () {
-      var rec = { t: new Date().toISOString(), amt: round2(amt), no: state.no || '', desc: desc || (card ? '出票' : '散单'), name: who };
-      if (card) {
-        card.balance = round2(card.balance - amt);
-        rec.after = round2(card.balance);
-        card.consumptions.push(rec);
-      } else {
-        state.cashConsumptions.push(rec);
+      var now = new Date().toISOString();
+      if (card && rechargeSum > 0) {
+        card.balance = round2(card.balance + rechargeSum);
+        card.totalRecharge = round2(totalRechargeOf(card) + rechargeSum);
+        card.recharges.push({ t: now, amt: rechargeSum, after: round2(card.balance), note: '出票充值' });
+      }
+      if (chargeAmt > 0) {
+        var rec = { t: now, amt: round2(chargeAmt), no: state.no || '', desc: desc || (card ? '出票' : '散单'), name: who };
+        if (card) {
+          card.balance = round2(card.balance - chargeAmt);
+          card.totalConsume = round2(totalConsumeOf(card) + chargeAmt);
+          rec.after = round2(card.balance);
+          card.consumptions.push(rec);
+        } else {
+          state.cashConsumptions.push(rec);
+        }
       }
       trimLedger(); renderWallet(); renderSlip(); save();
     };
-    if (last && last.name === who && round2(num(last.amt)) === round2(amt)) {
-      askConfirm('「' + (who || '客人') + '」相同金额 ' + money(amt) + ' 刚出过票，确认再次扣费？', doCharge, '重复出票确认');
+    if (chargeAmt > 0 && last && last.name === who && round2(num(last.amt)) === round2(chargeAmt)) {
+      askConfirm('「' + (who || '客人') + '」相同金额 ' + money(chargeAmt) + ' 刚出过票，确认再次扣费？', doCharge, '重复出票确认');
     } else {
       doCharge();
     }
@@ -3008,14 +3093,29 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
         var cards = Array.isArray(d.cards) ? d.cards : null;
         askConfirm('导入将覆盖当前账户与流水，确定继续？', function () {
           if (cards && cards.length) {
-            state.cards = cards.map(function (c) { if (c.discount === undefined || c.discount === null) c.discount = '100'; return c; });
+            state.cards = cards.map(function (c) {
+              if (c.discount === undefined || c.discount === null) c.discount = '100';
+              if (typeof c.totalRecharge !== 'number' || !isFinite(c.totalRecharge)) {
+                var tr = 0; (c.recharges || []).forEach(function (r) { if (r.note !== '手动改余额') tr += Number(r.amt) || 0; });
+                c.totalRecharge = Math.round(tr * 100) / 100;
+              }
+              if (typeof c.totalConsume !== 'number' || !isFinite(c.totalConsume)) {
+                var tc = 0; (c.consumptions || []).forEach(function (r) { tc += Number(r.amt) || 0; });
+                c.totalConsume = Math.round(tc * 100) / 100;
+              }
+              return c;
+            });
             state.activeCardId = d.activeCardId && cards.some(function (c) { return c.id === d.activeCardId; }) ? d.activeCardId : cards[0].id;
             state.cashConsumptions = Array.isArray(d.cashConsumptions) ? d.cashConsumptions : [];
           } else {
             var wb = typeof d.wBalance === 'number' && isFinite(d.wBalance) ? d.wBalance : 0;
+            var oldR = Array.isArray(d.recharges) ? d.recharges : [];
+            var oldC = Array.isArray(d.consumptions) ? d.consumptions : [];
+            var tr0 = 0; oldR.forEach(function (r) { if (r.note !== '手动改余额') tr0 += Number(r.amt) || 0; });
+            var tc0 = 0; oldC.forEach(function (r) { tc0 += Number(r.amt) || 0; });
             state.cards = [{ id: 'card-1', name: '默认储蓄卡', balance: wb,
-              recharges: Array.isArray(d.recharges) ? d.recharges : [],
-              consumptions: Array.isArray(d.consumptions) ? d.consumptions : [] }];
+              totalRecharge: Math.round(tr0 * 100) / 100, totalConsume: Math.round(tc0 * 100) / 100,
+              recharges: oldR, consumptions: oldC }];
             state.activeCardId = 'card-1';
             state.cashConsumptions = [];
           }
@@ -3064,7 +3164,17 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
       m.cards = [{ id: 'card-1', name: '默认储蓄卡', balance: oldBal, discount: '100', recharges: oldR, consumptions: oldC }];
       m.activeCardId = 'card-1';
     }
-    m.cards.forEach(function (c) { if (c.discount === undefined || c.discount === null) c.discount = '100'; });
+    m.cards.forEach(function (c) {
+      if (c.discount === undefined || c.discount === null) c.discount = '100';
+      if (typeof c.totalRecharge !== 'number' || !isFinite(c.totalRecharge)) {
+        var tr = 0; (c.recharges || []).forEach(function (r) { if (r.note !== '手动改余额') tr += Number(r.amt) || 0; });
+        c.totalRecharge = Math.round(tr * 100) / 100;
+      }
+      if (typeof c.totalConsume !== 'number' || !isFinite(c.totalConsume)) {
+        var tc = 0; (c.consumptions || []).forEach(function (r) { tc += Number(r.amt) || 0; });
+        c.totalConsume = Math.round(tc * 100) / 100;
+      }
+    });
     if (!Array.isArray(m.cashConsumptions)) m.cashConsumptions = [];
     if (!m.activeCardId || !m.cards.some(function (c) { return c.id === m.activeCardId; })) m.activeCardId = m.cards[0].id;
     if (m.slogan === undefined) m.slogan = DEFAULTS.slogan;
@@ -4034,6 +4144,8 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     $('#newCardBtn').addEventListener('click', newCard);
     $('#setCardDiscountBtn').addEventListener('click', setCardDiscount);
     $('#editBalanceBtn').addEventListener('click', editBalance);
+    $('#editTotalRechargeBtn').addEventListener('click', editTotalRecharge);
+    $('#editTotalConsumeBtn').addEventListener('click', editTotalConsume);
     $('#deleteCardBtn').addEventListener('click', deleteCard);
     function selectCard(id) {
       state.activeCardId = id;
@@ -4093,9 +4205,10 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
   var ROLE_OPTS = [
     { v: 'peipei', label: '陪陪' },
     { v: 'changkong', label: '场控' },
-    { v: 'zhishu', label: '直属' }
+    { v: 'zhishu', label: '直属' },
+    { v: 'recharge', label: '充值' }
   ];
-  var ROLE_LABELS = { peipei: '陪陪', changkong: '场控', zhishu: '直属' };
+  var ROLE_LABELS = { peipei: '陪陪', changkong: '场控', zhishu: '直属', recharge: '充值' };
   function ROLE_LABEL(role) { return ROLE_LABELS[role] || '陪陪'; }
 
   var DEFAULTS = {
@@ -4108,7 +4221,7 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     total: '',
     paid: '',
     discount: '100',
-    cards: [{ id: 'card-1', name: '默认储蓄卡', balance: 0, discount: '100', recharges: [], consumptions: [] }],
+    cards: [{ id: 'card-1', name: '默认储蓄卡', balance: 0, totalRecharge: 0, totalConsume: 0, discount: '100', recharges: [], consumptions: [] }],
     activeCardId: 'card-1',
     cashConsumptions: [],
     slogan: '按单结清 · 谢绝挂账',
