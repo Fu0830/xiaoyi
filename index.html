@@ -1132,6 +1132,10 @@ select.control{ appearance: none; -webkit-appearance: none; padding-right: 30px;
           <b id="clubCnView">落雪俱乐部</b>
           <i id="clubEnView">LUOXUE CLUB</i>
         </div>
+        <div class="field">
+          <label for="slogan">标语<span class="hint">店名下方那行小字</span></label>
+          <input id="slogan" class="control" autocomplete="off" spellcheck="false" placeholder="按单结清 · 谢绝挂账">
+        </div>
         <div class="avatar-row">
           <div class="avatar-preview" id="logoPreview" hidden><img id="logoPreviewImg" alt="徽章头像"></div>
           <button type="button" class="btn btn-ghost" id="logoUploadBtn">上传徽章头像</button>
@@ -1185,18 +1189,8 @@ select.control{ appearance: none; -webkit-appearance: none; padding-right: 30px;
           <button class="link-mini" id="totalReset" type="button" hidden>恢复自动</button>
         </div>
         <div class="money-row">
-          <span>折扣</span>
-          <select id="discount" class="control">
-            <option value="1">不打折</option>
-            <option value="0.99">99 折</option>
-            <option value="0.98">98 折</option>
-            <option value="0.96">96 折</option>
-            <option value="0.95">95 折</option>
-            <option value="0.92">92 折</option>
-            <option value="0.90">9 折</option>
-            <option value="0.85">85 折</option>
-            <option value="0.80">8 折</option>
-          </select>
+          <span>折扣<span class="hint">收款百分比，100＝原价不显示</span></span>
+          <input id="discount" type="number" class="control" inputmode="decimal" min="1" max="100" step="1" autocomplete="off" placeholder="100">
         </div>
         <div class="money-row">
           <span>实付金额</span>
@@ -2277,16 +2271,21 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
   function effTotal() {
     return state.total.trim() === '' ? autoTotal() : num(state.total);
   }
-  function discountRate() {
-    var r = parseFloat(state.discount);
-    return isFinite(r) && r > 0 && r <= 1 ? r : 1;
+  function discountPct() {
+    var raw = parseFloat(state.discount);
+    if (!isFinite(raw) || raw <= 0) return 100;
+    if (raw <= 1) raw = raw * 100; /* 兼容旧版存档：旧值是收款率(0.95)，换算成百分比 */
+    raw = Math.min(100, Math.max(1, raw));
+    return raw;
   }
-  var DISCOUNT_LABELS = {
-    '1': '不打折', '0.99': '99 折', '0.98': '98 折', '0.96': '96 折',
-    '0.95': '95 折', '0.92': '92 折', '0.90': '9 折', '0.85': '85 折', '0.80': '8 折'
-  };
+  function discountRate() {
+    return discountPct() / 100;
+  }
   function discountLabel() {
-    return DISCOUNT_LABELS[String(state.discount)] || (discountRate() >= 1 ? '不打折' : '');
+    var p = discountPct();
+    if (p >= 100) return ''; /* 100% 原价：不显示折扣 */
+    var s = (Math.round(p * 10) / 10).toString();
+    return s + '折';
   }
   function afterDiscount() {
     return effTotal() * discountRate();
@@ -2531,9 +2530,9 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     if (st === 'classic') {
       inner = fMeta + fBrand + fHeroClassic + fTime + fCols + fLines + fSum + fChips + fQuote;
     } else if (st === 'cream' || st === 'panel') {
-      inner = fBrand + fMeta + fCols + fLines + fHero + fLedger + fQuote;
+      inner = fBrand + fMeta + fTime + fCols + fLines + fHero + fLedger + fQuote;
     } else {
-      inner = fBrand + fMeta + fCols + fLines + fHero + fSum + fChips + fQuote;
+      inner = fBrand + fMeta + fTime + fCols + fLines + fHero + fSum + fChips + fQuote;
     }
 
     var barInner = st === 'pixel' ? '<div class="tk-winbtns"><i></i><i></i><i class="x"></i></div>' : '';
@@ -2754,7 +2753,8 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     m.bgOpacity = Math.min(1, Math.max(0.1, Number(m.bgOpacity) || 1));
     if (m.themeImg === undefined) m.themeImg = '';
     if (m.themeName === undefined) m.themeName = '';
-    if (m.discount === undefined) m.discount = '1';
+    if (m.discount === undefined) m.discount = '100';
+    if (m.slogan === undefined) m.slogan = DEFAULTS.slogan;
     if (DOT_SHAPES.indexOf(m.dotShape) < 0) m.dotShape = 'circle';
     var sc = Number(m.dotScale);
     m.dotScale = (sc >= 0.7 && sc <= 1.6) ? sc : 1;
@@ -2768,6 +2768,7 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     }
     if (['classic','cream','bakery','panel','pixel'].indexOf(m.style) < 0) m.style = 'classic';
     if (m.dotOn === undefined) m.dotOn = true;
+    m.when = toLocalInput(new Date()); /* 时间不记旧缓存：每次打开取手机当前时间定格，之后可手动改 */
     return m;
   }
   function syncForm() {
@@ -2777,11 +2778,12 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     $('#no').value = state.no;
     $('#total').value = state.total;
     $('#paid').value = state.paid;
-    $('#discount').value = state.discount || '1';
+    $('#discount').value = state.discount || '100';
     $('#balance').value = state.balance;
     $('#quote').value = state.quote;
     $('#name').value = state.name;
     $('#tail').value = state.tail;
+    $('#slogan').value = state.slogan || '';
     $$('[data-cur]').forEach(function (el) { el.textContent = state.cur; });
     var dotT = $('#dotToggle'); if (dotT) dotT.setAttribute('aria-pressed', String(!!state.dotOn));
   }
@@ -3503,13 +3505,13 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
       state.items = [{ type: '', sub: '', role: 'peipei', name: '', note: '', qty: '1', amt: '' }];
       state.total = '';
       state.paid = '';
-      state.discount = '1';
+      state.discount = '100';
       state.balance = DEFAULTS.balance;
       syncForm(); renderItems(); renderSlip(); save();
       toast('已清空点单项目与结算内容');
     });
 
-    ['when', 'no', 'quote', 'name', 'tail'].forEach(function (id) {
+    ['when', 'no', 'quote', 'name', 'tail', 'slogan'].forEach(function (id) {
       $('#' + id).addEventListener('input', function (e) {
         state[id] = e.target.value;
         renderSlip(); save();
@@ -3533,7 +3535,7 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     $('#paid').addEventListener('input', function (e) {
       state.paid = e.target.value; renderSlip(); save();
     });
-    $('#discount').addEventListener('change', function (e) {
+    $('#discount').addEventListener('input', function (e) {
       state.discount = e.target.value; renderSlip(); save();
     });
 
@@ -3751,7 +3753,8 @@ try { exports.GifWriter = GifWriter; exports.GifReader = GifReader } catch(e) {}
     items: [{ type: '双排上分', sub: 'SHUANG PAI', role: 'peipei', name: '栗子', note: '', qty: '3', amt: '128' }],
     total: '',
     paid: '',
-    discount: '1',
+    discount: '100',
+    slogan: '按单结清 · 谢绝挂账',
     balance: '1000',
     quote: '今天这份手气，记得带回家',
     name: '小满',
